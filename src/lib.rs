@@ -1,3 +1,15 @@
+//! RFC7873 left the construction of Server Cookies to the discretion
+//! of the DNS Server (implementer) which has resulted in a gallimaufry
+//! of different implementations.  As a result, DNS Cookies are
+//! impractical to deploy on multi-vendor anycast networks, because the
+//! Server Cookie constructed by one implementation cannot be validated
+//! by another.
+//!
+//! This crate is an implementation of [draft-sury-toorop-dnsop-server-cookies] which provides precise
+//! directions for creating Server and Client Cookies to address this issue.
+//!
+//! [draft-sury-toorop-dnsop-server-cookies]: https://datatracker.ietf.org/doc/html/draft-sury-toorop-dns-cookies-algorithms-00
+
 #![cfg_attr(feature = "no-std-net", no_std)]
 #![forbid(unsafe_code)]
 
@@ -15,7 +27,9 @@ use time::{OffsetDateTime, UtcOffset};
 const SERVER_COOKIE_LEN: usize = 16;
 const CLIENT_COOKIE_LEN: usize = 8;
 
+/// Prescribes the structure and Hash calculation formula
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[must_use]
 pub enum Version {
     One = 1,
 }
@@ -31,7 +45,9 @@ impl TryFrom<u8> for Version {
     }
 }
 
+/// Defines what algorithm function to use for calculating the Hash
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[must_use]
 pub enum Algorithm {
     SipHash24 = 4,
 }
@@ -78,13 +94,16 @@ impl Data {
     }
 }
 
+/// A 128-bit Server Cookie
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[must_use]
 pub struct Server {
     data: Data,
     hash: u64,
 }
 
 impl Server {
+    /// Creates a new server cookie
     pub fn new(
         version: Version,
         algorithm: Algorithm,
@@ -106,7 +125,20 @@ impl Server {
         }
     }
 
-    pub fn from_bytes(
+    /// Regenerates a server cookie if the current cookie is more than 30 minutes old
+    /// as prescribed by the draft
+    pub fn regenerate(mut self, time: OffsetDateTime, server_secret: &[u8]) -> Result<Self, Error> {
+        let time = time.to_offset(UtcOffset::UTC);
+        if self.data.time > time - 30.minutes() {
+            return Ok(self);
+        }
+        self.data.time = time;
+        self.hash = self.data.hash(server_secret);
+        Ok(self)
+    }
+
+    /// Creates and validates a server cookie from bytes
+    pub fn decode(
         mut now: OffsetDateTime,
         client_cookie: [u8; CLIENT_COOKIE_LEN],
         server_cookie: &[u8],
@@ -153,17 +185,9 @@ impl Server {
         Err(Error::InvalidHash)
     }
 
-    pub fn regenerate(mut self, time: OffsetDateTime, server_secret: &[u8]) -> Result<Self, Error> {
-        let time = time.to_offset(UtcOffset::UTC);
-        if self.data.time > time - 30.minutes() {
-            return Ok(self);
-        }
-        self.data.time = time;
-        self.hash = self.data.hash(server_secret);
-        Ok(self)
-    }
-
-    pub fn to_bytes(self) -> [u8; SERVER_COOKIE_LEN] {
+    /// Converts a server cookie to bytes
+    #[must_use]
+    pub const fn encode(self) -> [u8; SERVER_COOKIE_LEN] {
         let reserved = self.data.reserved.to_be_bytes();
         let timestamp = (self.data.time.unix_timestamp() as u32).to_be_bytes();
         let hash = self.hash.to_be_bytes();
@@ -188,12 +212,15 @@ impl Server {
     }
 }
 
+/// A 64-bit Client Cookie
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[must_use]
 pub struct Client {
     hash: u64,
 }
 
 impl Client {
+    /// Creates a new client cookie
     pub fn new(
         version: Version,
         algorithm: Algorithm,
@@ -222,7 +249,8 @@ impl Client {
         }
     }
 
-    pub fn from_bytes(
+    /// Creates and validates a client cookie from bytes
+    pub fn decode(
         version: Version,
         algorithm: Algorithm,
         client_ip: IpAddr,
@@ -240,13 +268,16 @@ impl Client {
         Err(Error::InvalidHash)
     }
 
+    /// Converts a client cookie to bytes
     #[must_use]
-    pub fn to_bytes(self) -> [u8; CLIENT_COOKIE_LEN] {
+    pub const fn encode(self) -> [u8; CLIENT_COOKIE_LEN] {
         self.hash.to_be_bytes()
     }
 }
 
+/// The errors returned by this crate
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[must_use]
 pub enum Error {
     IncorrectLength(usize),
     TimestampRange(time::error::ComponentRange),
@@ -279,5 +310,5 @@ impl fmt::Display for Error {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(not(feature = "no-std-net"))]
 impl std::error::Error for Error {}
