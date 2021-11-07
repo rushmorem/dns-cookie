@@ -127,14 +127,14 @@ impl Server {
 
     /// Regenerates a server cookie if the current cookie is more than 30 minutes old
     /// as prescribed by the draft
-    pub fn regenerate(mut self, time: OffsetDateTime, server_secret: &[u8]) -> Result<Self, Error> {
+    pub fn regenerate(mut self, time: OffsetDateTime, server_secret: &[u8]) -> Self {
         let time = time.to_offset(UtcOffset::UTC);
         if self.data.time > time - 30.minutes() {
-            return Ok(self);
+            return self;
         }
         self.data.time = time;
         self.hash = self.data.hash(server_secret);
-        Ok(self)
+        self
     }
 
     /// Creates and validates a server cookie from bytes
