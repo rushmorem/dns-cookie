@@ -10,11 +10,7 @@ keywords = ["dns", "no_std"]
 authors = ["rushmorem <rushmore@webenchanter.com>"]
 edition = "2018"
 
-[features]
-default = ["std"]
-std = []
-
 [dependencies]
-no-std-net = { version = "0.5.0", default-features = false }
 siphasher = { version = "0.3.7", default-features = false }
 time = { version = "0.3.4", default-features = false }
+no-std-net = { version = "0.5.0", default-features = false, optional = true }

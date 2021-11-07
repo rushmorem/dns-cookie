@@ -1,11 +1,14 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(feature = "no-std-net", no_std)]
 #![forbid(unsafe_code)]
 
 use core::convert::TryFrom;
 use core::fmt;
 use core::hash::Hasher;
+#[cfg(feature = "no-std-net")]
 use no_std_net::IpAddr;
 use siphasher::sip::SipHasher24;
+#[cfg(not(feature = "no-std-net"))]
+use std::net::IpAddr;
 use time::ext::NumericalDuration;
 use time::{OffsetDateTime, UtcOffset};
 
