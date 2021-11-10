@@ -249,29 +249,16 @@ impl Client {
         }
     }
 
-    /// Creates and validates a client cookie from bytes
-    pub fn decode(
-        version: Version,
-        algorithm: Algorithm,
-        client_ip: IpAddr,
-        server_ip: IpAddr,
-        client_cookie: [u8; CLIENT_COOKIE_LEN],
-        client_secrets: &[&[u8]],
-    ) -> Result<Self, Error> {
-        let hash = u64::from_be_bytes(client_cookie);
-        for secret in client_secrets {
-            let cookie = Self::new(version, algorithm, client_ip, server_ip, secret);
-            if cookie.hash == hash {
-                return Ok(cookie);
-            }
-        }
-        Err(Error::InvalidHash)
-    }
-
     /// Converts a client cookie to bytes
     #[must_use]
     pub const fn encode(self) -> [u8; CLIENT_COOKIE_LEN] {
         self.hash.to_be_bytes()
+    }
+}
+
+impl PartialEq<[u8; CLIENT_COOKIE_LEN]> for Client {
+    fn eq(&self, other: &[u8; CLIENT_COOKIE_LEN]) -> bool {
+        self.hash == u64::from_be_bytes(*other)
     }
 }
 
